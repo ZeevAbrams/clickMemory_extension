@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClickMemory Snippets</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Setup Screen -->
+    <div id="setupScreen" class="screen">
+      <div class="header">
+        <img src="icons/icon48.png" alt="ClickMemory" class="logo">
+        <h1>ClickMemory</h1>
+      </div>
+      
+      <div class="setup-content">
+        <h2>Setup Required</h2>
+        <p>To use ClickMemory, you need to generate an API key from your web app.</p>
+        
+        <div class="steps">
+          <div class="step">
+            <span class="step-number">1</span>
+            <p>Go to <a href="#" id="openWebApp">ClickMemory Web App</a></p>
+          </div>
+          <div class="step">
+            <span class="step-number">2</span>
+            <p>Navigate to Settings → Chrome Extension Setup</p>
+          </div>
+          <div class="step">
+            <span class="step-number">3</span>
+            <p>Generate an API key and copy it</p>
+          </div>
+          <div class="step">
+            <span class="step-number">4</span>
+            <p>Paste the API key below</p>
+          </div>
+        </div>
+        
+        <div class="api-key-input">
+          <input type="password" id="apiKeyInput" placeholder="Paste your API key here (sk_live_...)" />
+          <button id="connectBtn" class="btn-primary">Connect</button>
+        </div>
+        
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="mainScreen" class="screen hidden">
+      <div class="header">
+        <img src="icons/icon48.png" alt="ClickMemory" class="logo">
+        <h1>ClickMemory</h1>
+        <button id="settingsBtn" class="btn-icon" title="Settings">⚙️</button>
+      </div>
+      
+      <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Search snippets..." />
+      </div>
+      
+      <div class="snippets-container">
+        <div id="snippetsList" class="snippets-list">
+          <!-- Snippets will be populated here -->
+        </div>
+        
+        <div id="loadingState" class="loading-state hidden">
+          <div class="spinner"></div>
+          <p>Loading snippets...</p>
+        </div>
+        
+        <div id="emptyState" class="empty-state hidden">
+          <p>No snippets found</p>
+          <p class="subtitle">Create your first snippet in the web app</p>
+        </div>
+      </div>
+      
+      <div class="footer">
+        <button id="refreshBtn" class="btn-secondary">Refresh</button>
+        <button id="disconnectBtn" class="btn-text">Disconnect</button>
+      </div>
+    </div>
+
+    <!-- Settings Screen -->
+    <div id="settingsScreen" class="screen hidden">
+      <div class="header">
+        <button id="backBtn" class="btn-icon">←</button>
+        <h1>Settings</h1>
+      </div>
+      
+      <div class="settings-content">
+        <div class="setting-group">
+          <h3>API Configuration</h3>
+          <div class="setting-item">
+            <label>API Key:</label>
+            <input type="password" id="settingsApiKeyInput" readonly />
+            <button id="showApiKeyBtn" class="btn-text">Show</button>
+          </div>
+          <div class="setting-item">
+            <label>Web App URL:</label>
+            <input type="text" id="webAppUrlInput" placeholder="https://your-app.vercel.app" />
+          </div>
+        </div>
+        
+        <div class="setting-group">
+          <h3>Display Options</h3>
+          <div class="setting-item">
+            <label>
+              <input type="checkbox" id="showSharedSnippets" checked />
+              Show shared snippets
+            </label>
+          </div>
+          <div class="setting-item">
+            <label>
+              <input type="checkbox" id="showSnippetPreview" checked />
+              Show snippet preview
+            </label>
+          </div>
+        </div>
+        
+        <div class="setting-actions">
+          <button id="saveSettingsBtn" class="btn-primary">Save Settings</button>
+          <button id="resetSettingsBtn" class="btn-text">Reset to Defaults</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html> 
