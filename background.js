@@ -1,7 +1,88 @@
 // Background service worker for ClickMemory extension
 
 // Configuration
-const DEFAULT_WEB_APP_URL = 'https://click-memory-app.vercel.app';
+// For local development: http://localhost:3000
+// For production: https://click-memory-app.vercel.app
+const DEFAULT_WEB_APP_URL = 'http://localhost:3000';
+
+// Periodic sync of snippets (every 5 minutes)
+let syncInterval;
+
+// Flag to prevent multiple simultaneous context menu creation
+let isCreatingContextMenu = false;
+
+function startPeriodicSync() {
+  // Clear existing interval
+  if (syncInterval) {
+    clearInterval(syncInterval);
+  }
+  
+  // Set up new interval
+  syncInterval = setInterval(async () => {
+    try {
+      console.log('Running periodic sync...');
+      
+      const result = await chrome.storage.local.get(['apiKey']);
+      const apiKey = result.apiKey;
+      
+      if (!apiKey) {
+        console.log('No API key, skipping sync');
+        return;
+      }
+      
+      // Fetch fresh snippets
+      const response = await fetch('http://localhost:3000/api/snippets?context_menu=true', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'ChromeExtension/1.0'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Sync failed:', response.status);
+        return;
+      }
+      
+      const data = await response.json();
+      const snippets = data.snippets || [];
+      
+      console.log('Periodic sync: fetched', snippets.length, 'snippets');
+      
+      // Update cached snippets
+      await chrome.storage.local.set({ cachedSnippets: snippets });
+      
+      // Update context menu
+      await createContextMenu();
+      
+    } catch (error) {
+      console.error('Periodic sync error:', error);
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+  
+  console.log('Periodic sync started');
+}
+
+function stopPeriodicSync() {
+  if (syncInterval) {
+    clearInterval(syncInterval);
+    syncInterval = null;
+    console.log('Periodic sync stopped');
+  }
+}
+
+// Start periodic sync when extension loads
+chrome.runtime.onStartup.addListener(() => {
+  console.log('Extension startup - starting periodic sync');
+  startPeriodicSync();
+});
+
+// Start periodic sync when extension is installed/updated
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Extension installed/updated - starting periodic sync');
+  startPeriodicSync();
+});
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener((details) => {
@@ -20,16 +101,43 @@ chrome.runtime.onInstalled.addListener((details) => {
   createContextMenu();
 });
 
+// Listen for changes to storage (like when API key is set)
+chrome.storage.onChanged.addListener(function(changes, namespace) {
+  if (changes.apiKey || changes.webAppUrl) {
+    // Recreate context menu when API key or URL changes
+    setTimeout(() => createContextMenu(), 500);
+  }
+});
+
+// Create context menu on startup
+createContextMenu();
+
 // Create context menu with snippets
 async function createContextMenu() {
+  // Prevent multiple simultaneous calls
+  if (isCreatingContextMenu) {
+    console.log('Context menu creation already in progress, skipping...');
+    return;
+  }
+  
+  isCreatingContextMenu = true;
+  
   try {
-    // Remove existing context menu items
+    console.log('Creating context menu...');
+    
+    // Always remove existing context menu items first
     await chrome.contextMenus.removeAll();
     
-    // Get API key and web app URL
-    const result = await chrome.storage.local.get(['apiKey', 'webAppUrl']);
+    // Small delay to ensure removal is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Get API key and stored snippets
+    const result = await chrome.storage.local.get(['apiKey', 'cachedSnippets']);
     const apiKey = result.apiKey;
-    const webAppUrl = result.webAppUrl || DEFAULT_WEB_APP_URL;
+    const cachedSnippets = result.cachedSnippets || [];
+    
+    console.log('API key exists:', !!apiKey);
+    console.log('Cached snippets count:', cachedSnippets.length);
     
     if (!apiKey) {
       // No API key, create setup menu item
@@ -38,33 +146,18 @@ async function createContextMenu() {
         title: 'ClickMemory: Setup Required',
         contexts: ['editable']
       });
+      console.log('Created setup menu item');
       return;
     }
     
-    // Fetch context menu snippets
-    const response = await fetch(`${webAppUrl}/api/snippets?context_menu=true`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'ChromeExtension/1.0'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch snippets');
-    }
-    
-    const data = await response.json();
-    const snippets = data.snippets || [];
-    
-    if (snippets.length === 0) {
+    if (cachedSnippets.length === 0) {
       // No snippets available
       chrome.contextMenus.create({
         id: 'clickmemory-no-snippets',
         title: 'ClickMemory: No snippets available',
         contexts: ['editable']
       });
+      console.log('Created no snippets menu item');
       return;
     }
     
@@ -75,104 +168,132 @@ async function createContextMenu() {
       contexts: ['editable']
     });
     
-    // Create menu items for each snippet
-    snippets.forEach((snippet, index) => {
-      chrome.contextMenus.create({
-        id: `clickmemory-snippet-${snippet.id}`,
-        parentId: 'clickmemory-parent',
-        title: snippet.title.length > 30 ? snippet.title.substring(0, 30) + '...' : snippet.title,
-        contexts: ['editable']
-      });
-    });
+    console.log('Created parent menu');
     
-    // Store snippets for quick access
-    await chrome.storage.local.set({ contextMenuSnippets: snippets });
+    // Create menu items for each snippet from local storage
+    for (const snippet of cachedSnippets) {
+      try {
+        chrome.contextMenus.create({
+          id: `clickmemory-snippet-${snippet.id}`,
+          parentId: 'clickmemory-parent',
+          title: snippet.title.length > 30 ? snippet.title.substring(0, 30) + '...' : snippet.title,
+          contexts: ['editable']
+        });
+      } catch (error) {
+        console.error('Error creating menu item for snippet:', snippet.id, error);
+      }
+    }
+    
+    console.log('Created', cachedSnippets.length, 'snippet menu items');
+    
+    // Store snippets for quick access (use cached snippets)
+    await chrome.storage.local.set({ contextMenuSnippets: cachedSnippets });
+    
+    console.log('Context menu creation completed successfully');
     
   } catch (error) {
     console.error('Error creating context menu:', error);
     
-    // Create error menu item
-    chrome.contextMenus.create({
-      id: 'clickmemory-error',
-      title: 'ClickMemory: Error loading snippets',
-      contexts: ['editable']
-    });
+    // Try to create error menu item
+    try {
+      await chrome.contextMenus.removeAll();
+      chrome.contextMenus.create({
+        id: 'clickmemory-error',
+        title: 'ClickMemory: Error loading snippets',
+        contexts: ['editable']
+      });
+    } catch (cleanupError) {
+      console.error('Error creating error menu item:', cleanupError);
+    }
+  } finally {
+    // Always reset the flag
+    isCreatingContextMenu = false;
   }
 }
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const menuId = info.menuItemId;
+  console.log('Context menu clicked:', info.menuItemId);
   
-  if (menuId === 'clickmemory-setup') {
-    // Open extension popup for setup
-    chrome.action.openPopup();
+  if (info.menuItemId === 'clickmemory-setup') {
+    // Open setup page
+    chrome.tabs.create({ url: 'http://localhost:3000/auth' });
     return;
   }
   
-  if (menuId === 'clickmemory-no-snippets' || menuId === 'clickmemory-error') {
-    // Open extension popup
-    chrome.action.openPopup();
+  if (info.menuItemId === 'clickmemory-no-snippets') {
+    // Open dashboard to create snippets
+    chrome.tabs.create({ url: 'http://localhost:3000/dashboard' });
     return;
   }
   
-  if (menuId.startsWith('clickmemory-snippet-')) {
-    // Insert snippet into the active text field
-    const snippetId = menuId.replace('clickmemory-snippet-', '');
+  if (info.menuItemId === 'clickmemory-error') {
+    // Open dashboard to troubleshoot
+    chrome.tabs.create({ url: 'http://localhost:3000/dashboard' });
+    return;
+  }
+  
+  if (info.menuItemId.startsWith('clickmemory-snippet-')) {
+    const snippetId = info.menuItemId.replace('clickmemory-snippet-', '');
+    console.log('Selected snippet ID:', snippetId);
     
     try {
-      // Get snippets from storage
+      // Get cached snippets from local storage
       const result = await chrome.storage.local.get(['contextMenuSnippets']);
       const snippets = result.contextMenuSnippets || [];
       
       const snippet = snippets.find(s => s.id === snippetId);
       if (!snippet) {
-        console.error('Snippet not found:', snippetId);
+        console.error('Snippet not found in cache:', snippetId);
         return;
       }
       
-      // Send message to content script to insert snippet
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'insertSnippet',
-        text: snippet.content
+      console.log('Found snippet:', snippet.title);
+      
+      // Insert the snippet content using chrome.scripting.executeScript
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: insertSnippetText,
+        args: [snippet.content]
       });
       
     } catch (error) {
-      console.error('Error inserting snippet:', error);
+      console.error('Error handling snippet selection:', error);
     }
   }
 });
 
-// Handle messages from popup or content scripts
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case 'getSnippets':
-      handleGetSnippets(request.apiKey, request.webAppUrl)
-        .then(sendResponse)
-        .catch(error => sendResponse({ error: error.message }));
-      return true; // Keep message channel open for async response
-    
-    case 'copyToClipboard':
-      handleCopyToClipboard(request.text)
-        .then(() => sendResponse({ success: true }))
-        .catch(error => sendResponse({ error: error.message }));
+// Handle messages from popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Received message:', message);
+  
+  if (message.action === 'updateContextMenu') {
+    // Prevent multiple simultaneous calls
+    if (isCreatingContextMenu) {
+      console.log('Context menu creation already in progress, skipping update request');
+      sendResponse({ success: false, error: 'Context menu creation already in progress' });
       return true;
+    }
     
-    case 'refreshContextMenu':
-      createContextMenu()
-        .then(() => sendResponse({ success: true }))
-        .catch(error => sendResponse({ error: error.message }));
-      return true;
-    
-    default:
-      sendResponse({ error: 'Unknown action' });
+    createContextMenu().then(() => {
+      console.log('Context menu updated successfully');
+      sendResponse({ success: true });
+    }).catch(error => {
+      console.error('Error updating context menu:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Keep message channel open for async response
   }
 });
 
 // Handle API requests for snippets
 async function handleGetSnippets(apiKey, webAppUrl) {
   try {
-    const response = await fetch(`${webAppUrl}/api/snippets`, {
+    const url = `${webAppUrl}/api/snippets`;
+    console.log('Background script making request to:', url);
+    console.log('API Key:', apiKey.substring(0, 20) + '...');
+    
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -181,15 +302,52 @@ async function handleGetSnippets(apiKey, webAppUrl) {
       }
     });
 
+    console.log('Background response status:', response.status);
+    console.log('Background response headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      const error = await response.json();
+      const errorText = await response.text();
+      console.log('Background error response text:', errorText);
+      let error;
+      try {
+        error = JSON.parse(errorText);
+      } catch (e) {
+        error = { error: errorText };
+      }
       throw new Error(error.error || 'Failed to fetch snippets');
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log('Background success response:', data);
+    return data;
   } catch (error) {
     console.error('Background API Error:', error);
     throw error;
+  }
+}
+
+// Function to insert snippet text into the active element (injected into page)
+function insertSnippetText(text) {
+  const activeElement = document.activeElement;
+  if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.isContentEditable)) {
+    if (activeElement.isContentEditable) {
+      // For contentEditable elements
+      document.execCommand('insertText', false, text);
+    } else {
+      // For input and textarea elements
+      const startPos = activeElement.selectionStart;
+      const endPos = activeElement.selectionEnd;
+      const beforeText = activeElement.value.substring(0, startPos);
+      const afterText = activeElement.value.substring(endPos);
+      activeElement.value = beforeText + text + afterText;
+      
+      // Trigger input event for forms that use event listeners
+      const event = new Event('input', { bubbles: true });
+      activeElement.dispatchEvent(event);
+      
+      // Set cursor position after the pasted text
+      activeElement.selectionStart = activeElement.selectionEnd = startPos + text.length;
+    }
   }
 }
 
@@ -208,6 +366,7 @@ async function handleCopyToClipboard(text) {
       document.execCommand('copy');
       document.body.removeChild(textArea);
     }
+    console.log('Text copied to clipboard successfully');
   } catch (error) {
     console.error('Clipboard error:', error);
     throw new Error('Failed to copy to clipboard');

@@ -6,10 +6,9 @@
   "permissions": [
     "storage",
     "clipboardWrite",
-    "contextMenus"
-  ],
-  "host_permissions": [
-    "https://click-memory-app.vercel.app/*"
+    "contextMenus",
+    "scripting",
+    "activeTab"
   ],
   "action": {
     "default_popup": "popup.html",
