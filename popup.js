@@ -3,6 +3,29 @@
 // For production: https://click-memory-app.vercel.app
 const DEFAULT_WEB_APP_URL = 'http://localhost:3000';
 
+// Tracking function for extension events
+async function trackEvent(eventName, properties = {}) {
+  try {
+    const result = await chrome.storage.local.get(['apiKey']);
+    const apiKey = result.apiKey;
+    
+    await fetch('http://localhost:3000/api/track', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({ 
+        eventName, 
+        properties,
+        userId: apiKey ? 'extension_user' : 'anonymous'
+      })
+    });
+  } catch (error) {
+    console.error('Tracking error:', error);
+  }
+}
+
 // API class for communicating with the web app
 class SnippetAPI {
   constructor(apiKey, baseUrl = DEFAULT_WEB_APP_URL) {
@@ -143,6 +166,7 @@ class PopupUI {
     this.refreshBtn = document.getElementById('refreshBtn');
     this.disconnectBtn = document.getElementById('disconnectBtn');
     this.settingsBtn = document.getElementById('settingsBtn');
+    this.webAppBtn = document.getElementById('webAppBtn');
     
     // Settings screen elements
     this.backBtn = document.getElementById('backBtn');
@@ -169,6 +193,7 @@ class PopupUI {
     this.refreshBtn.addEventListener('click', () => this.loadSnippets());
     this.disconnectBtn.addEventListener('click', () => this.disconnect());
     this.settingsBtn.addEventListener('click', () => this.showSettings());
+    this.webAppBtn.addEventListener('click', () => this.openWebApp());
     
     // Settings screen events
     this.backBtn.addEventListener('click', () => this.showMain());
@@ -215,58 +240,41 @@ class PopupUI {
   // Setup functionality
   async connect() {
     const apiKey = this.apiKeyInput.value.trim();
-    
     if (!apiKey) {
       this.showStatus('Please enter an API key', 'error');
       return;
     }
 
-    if (!apiKey.startsWith('sk_live_')) {
-      this.showStatus('Invalid API key format. Should start with sk_live_', 'error');
-      return;
-    }
-
-    if (apiKey.length !== 72) {
-      this.showStatus('Invalid API key format. Should be 72 characters long', 'error');
-      return;
-    }
-
+    this.showStatus('Connecting...', 'info');
+    
     try {
-      this.showStatus('Connecting...', 'loading');
+      this.api = new SnippetAPI(apiKey, this.state.webAppUrl);
+      const data = await this.api.getSnippets();
       
-      // Test basic connectivity first
-      console.log('Testing basic connectivity...');
-      try {
-        const testResponse = await fetch('http://localhost:3000');
-        console.log('Basic connectivity test status:', testResponse.status);
-      } catch (testError) {
-        console.error('Basic connectivity test failed:', testError);
-        this.showStatus(`Basic connectivity failed: ${testError.message}`, 'error');
-        return;
-      }
-      
-      // Test the API key
-      const testApi = new SnippetAPI(apiKey, this.state.webAppUrl);
-      const data = await testApi.getSnippets();
-      
-      // Save the API key
-      this.state.apiKey = apiKey;
-      await this.state.save();
-      
-      this.api = testApi;
-      this.showStatus(`Connected! Found ${data.total_count} snippets`, 'success');
-      
-      // Refresh context menu
-      await this.refreshContextMenu();
-      
-      setTimeout(() => {
+      if (data.snippets !== undefined) {
+        this.state.apiKey = apiKey;
+        await this.state.save();
+        
+        // Track successful connection
+        trackEvent('extension_connected', {
+          webAppUrl: this.state.webAppUrl
+        });
+        
         this.showMain();
-        this.loadSnippets();
-      }, 1000);
-      
+        await this.loadSnippets();
+        this.showStatus('Connected successfully!', 'success');
+        setTimeout(() => this.clearStatus(), 2000);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
       console.error('Connection error:', error);
-      this.showStatus(`Connection failed: ${error.message}`, 'error');
+      this.showStatus('Connection failed: ' + error.message, 'error');
+      
+      // Track connection error
+      trackEvent('extension_connection_error', {
+        error: error.message
+      });
     }
   }
 
@@ -278,18 +286,25 @@ class PopupUI {
   async loadSnippets() {
     if (!this.api) return;
 
+    this.showLoading(true);
     try {
-      this.showLoading(true);
       const data = await this.api.getSnippets();
       this.snippets = data.snippets || [];
       this.filteredSnippets = [...this.snippets];
       this.displaySnippets();
       
-      // Refresh context menu after loading snippets
-      await this.refreshContextMenu();
+      // Track snippets loaded
+      trackEvent('extension_snippets_loaded', {
+        snippetCount: this.snippets.length
+      });
     } catch (error) {
       console.error('Error loading snippets:', error);
-      this.showStatus(`Failed to load snippets: ${error.message}`, 'error');
+      this.showStatus('Failed to load snippets: ' + error.message, 'error');
+      
+      // Track loading error
+      trackEvent('extension_snippets_load_error', {
+        error: error.message
+      });
     } finally {
       this.showLoading(false);
     }
@@ -311,57 +326,63 @@ class PopupUI {
   }
 
   displaySnippets() {
-    if (this.filteredSnippets.length === 0) {
-      this.snippetsList.innerHTML = '';
-      this.emptyState.classList.remove('hidden');
+    if (this.snippets.length === 0) {
+      this.snippetsList.innerHTML = `
+        <div class="empty-state">
+          <p>No snippets found</p>
+          <p class="text-sm text-gray-500">Create snippets in the web app first</p>
+        </div>
+      `;
       return;
     }
 
-    this.emptyState.classList.add('hidden');
-    
-    const snippetsHtml = this.filteredSnippets.map(snippet => {
-      const preview = this.state.settings.showSnippetPreview 
-        ? snippet.content.substring(0, 100) + (snippet.content.length > 100 ? '...' : '')
-        : '';
-      
-      const sharedBadge = snippet.is_shared 
-        ? '<span class="shared-badge">Shared</span>' 
-        : '';
-      
-      const contextMenuBadge = snippet.is_public 
-        ? '<span class="context-menu-badge">Context Menu</span>' 
-        : '';
-      
-      return `
-        <div class="snippet-item" data-snippet-id="${snippet.id}">
-          <h3>${this.escapeHtml(snippet.title)}</h3>
-          ${preview ? `<p>${this.escapeHtml(preview)}</p>` : ''}
-          <div class="snippet-actions">
-            <button class="copy-btn" onclick="popupUI.copySnippet('${this.escapeHtml(snippet.content)}')">
-              Copy
-            </button>
-            ${sharedBadge}
-            ${contextMenuBadge}
-          </div>
+    this.snippetsList.innerHTML = this.filteredSnippets.map(snippet => `
+      <div class="snippet-item" data-snippet-id="${snippet.id}">
+        <div class="snippet-header">
+          <h3 class="snippet-title">${this.escapeHtml(snippet.title)}</h3>
+          <button class="copy-btn" title="Copy to clipboard">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+          </button>
         </div>
-      `;
-    }).join('');
-    
-    this.snippetsList.innerHTML = snippetsHtml;
+        <p class="snippet-content">${this.escapeHtml(snippet.content.substring(0, 100))}${snippet.content.length > 100 ? '...' : ''}</p>
+      </div>
+    `).join('');
+
+    // Add click handlers for copy buttons
+    this.snippetsList.querySelectorAll('.copy-btn').forEach((btn, index) => {
+      btn.addEventListener('click', () => this.copySnippet(this.filteredSnippets[index].content));
+    });
   }
 
   async copySnippet(content) {
     try {
-      // Use the background script's clipboard functionality
-      await chrome.runtime.sendMessage({ 
-        action: 'copyToClipboard', 
-        text: content 
+      await navigator.clipboard.writeText(content);
+      
+      // Track copy action
+      trackEvent('snippet_copied_via_extension', {
+        contentLength: content.length
       });
-      this.showStatus('Snippet copied to clipboard!', 'success');
-      setTimeout(() => this.clearStatus(), 2000);
+      
+      // Show success feedback
+      const copyBtn = event.target.closest('.copy-btn');
+      const originalText = copyBtn.innerHTML;
+      copyBtn.innerHTML = `
+        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      `;
+      setTimeout(() => {
+        copyBtn.innerHTML = originalText;
+      }, 1000);
     } catch (error) {
       console.error('Failed to copy:', error);
-      this.showStatus('Failed to copy snippet', 'error');
+      
+      // Track copy error
+      trackEvent('extension_copy_error', {
+        error: error.message
+      });
     }
   }
 

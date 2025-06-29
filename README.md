@@ -1,19 +1,51 @@
 # ClickMemory Chrome Extension
 
-A Chrome extension that allows you to access your ClickMemory text snippets from any webpage.
+A Chrome extension that allows you to access your ClickMemory text snippets from any webpage with a simple right-click.
 
 ## Features
 
 - **Secure API Key Authentication**: Uses secure API keys instead of passwords
-- **Quick Access**: Access your snippets with one click from the extension icon
+- **Right-Click Access**: Access your snippets directly from any webpage's context menu
+- **Quick Copy**: Copy snippet content with a single click
 - **Search Functionality**: Search through your snippets quickly
-- **Copy to Clipboard**: Copy snippet content with a single click
 - **Shared Snippets Support**: View snippets shared with you by others
 - **Settings Management**: Configure the extension to your preferences
 
-## Installation
+## How to Use ClickMemory Extension
 
-### Development Installation
+Follow these steps to set up and use the ClickMemory browser extension for quick access to your snippets.
+
+### Step 1: Create a New Snippet
+
+Start by creating a snippet that you want to access quickly from any webpage.
+
+1. Go to your ClickMemory web app
+2. Navigate to the dashboard
+3. Click "Create New Snippet"
+4. Add your text content and save
+
+### Step 2: Select Your Snippet
+
+Choose which snippet you want to use with the extension. You can create multiple snippets and switch between them.
+
+1. View your snippets in the dashboard
+2. Note which snippet you want to access via the extension
+3. You can edit or create additional snippets as needed
+
+### Step 3: Get Your API Key
+
+Generate an API key from the Settings page. This key will securely connect your extension to your ClickMemory account.
+
+1. Go to Settings in your ClickMemory web app
+2. Navigate to Chrome Extension Setup
+3. Click "Generate API Key"
+4. Copy the generated key (starts with `sk_live_`)
+
+### Step 4: Install the Extension
+
+Download and install the ClickMemory browser extension to access your snippets from any webpage.
+
+#### Development Installation
 
 1. Clone or download this extension folder
 2. Open Chrome and go to `chrome://extensions/`
@@ -21,27 +53,18 @@ A Chrome extension that allows you to access your ClickMemory text snippets from
 4. Click "Load unpacked" and select the `click-memory-extension` folder
 5. The extension should now appear in your extensions list
 
-### Production Installation
+#### Production Installation
 
 Once published to the Chrome Web Store, users can install it directly from there.
 
-## Setup
+### Step 5: Configure the Extension
 
-1. **Generate API Key**: 
-   - Go to your ClickMemory web app
-   - Navigate to Settings → Chrome Extension Setup
-   - Click "Generate API Key"
-   - Copy the generated key (starts with `sk_live_`)
+Open the extension, paste your API key, and you're ready to right-click and access your snippets anywhere!
 
-2. **Configure Extension**:
-   - Click the ClickMemory extension icon
-   - Paste your API key in the setup screen
-   - Click "Connect"
-
-3. **Start Using**:
-   - Click the extension icon to view your snippets
-   - Use the search bar to find specific snippets
-   - Click "Copy" to copy snippet content to clipboard
+1. Click the ClickMemory extension icon
+2. Paste your API key in the setup screen
+3. Click "Connect"
+4. **Pro tip:** Once configured, you can right-click on any webpage and select your snippet from the context menu for instant access
 
 ## Configuration
 
@@ -127,6 +150,7 @@ For issues or questions:
 1. Check the troubleshooting section above
 2. Verify your web app is properly configured
 3. Ensure your API key is valid and not expired
+4. Email us at info@iteraite.com
 
 ## License
 
