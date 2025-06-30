@@ -3,13 +3,21 @@
 // For production: https://click-memory.vercel.app
 const DEFAULT_WEB_APP_URL = 'https://click-memory.vercel.app';
 
+// Get the current web app URL from storage or use default
+async function getWebAppUrl() {
+  const result = await chrome.storage.local.get(['webAppUrl']);
+  return result.webAppUrl || DEFAULT_WEB_APP_URL;
+}
+
 // Tracking function for extension events
 async function trackEvent(eventName, properties = {}) {
   try {
     const result = await chrome.storage.local.get(['apiKey']);
     const apiKey = result.apiKey;
     
-    await fetch('https://click-memory.vercel.app/api/track', {
+    const webAppUrl = await getWebAppUrl();
+    
+    await fetch(`${webAppUrl}/api/track`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -82,6 +90,44 @@ class SnippetAPI {
       throw error;
     }
   }
+
+  async getContextMenuSnippets() {
+    try {
+      const url = `${this.baseUrl}/api/snippets?context_menu=true`;
+      console.log('Extension making context menu request to:', url);
+      
+      const headers = {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'ChromeExtension/1.0'
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: headers
+      });
+
+      console.log('Context menu response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let error;
+        try {
+          error = JSON.parse(errorText);
+        } catch (e) {
+          error = { error: errorText };
+        }
+        throw new Error(error.error || 'Failed to fetch context menu snippets');
+      }
+
+      const data = await response.json();
+      console.log('Context menu success response:', data);
+      return data;
+    } catch (error) {
+      console.error('Context Menu API Error:', error);
+      throw error;
+    }
+  }
 }
 
 // Extension state management
@@ -103,8 +149,8 @@ class ExtensionState {
     ]);
     
     this.apiKey = result.apiKey || null;
-    // Use production URL by default
-    this.webAppUrl = result.webAppUrl || 'https://click-memory.vercel.app';
+    // Use stored URL or default
+    this.webAppUrl = result.webAppUrl || DEFAULT_WEB_APP_URL;
     this.settings = { ...this.settings, ...result.settings };
   }
 
@@ -119,7 +165,7 @@ class ExtensionState {
   async clear() {
     await chrome.storage.local.clear();
     this.apiKey = null;
-    this.webAppUrl = 'https://click-memory.vercel.app';
+    this.webAppUrl = DEFAULT_WEB_APP_URL;
     this.settings = {
       showSharedSnippets: true,
       showSnippetPreview: true
@@ -164,6 +210,8 @@ class PopupUI {
     this.loadingState = document.getElementById('loadingState');
     this.emptyState = document.getElementById('emptyState');
     this.refreshBtn = document.getElementById('refreshBtn');
+    this.allSnippetsBtn = document.getElementById('allSnippetsBtn');
+    this.syncBtn = document.getElementById('syncBtn');
     this.disconnectBtn = document.getElementById('disconnectBtn');
     this.settingsBtn = document.getElementById('settingsBtn');
     this.webAppBtn = document.getElementById('webAppBtn');
@@ -191,6 +239,8 @@ class PopupUI {
     // Main screen events
     this.searchInput.addEventListener('input', () => this.filterSnippets());
     this.refreshBtn.addEventListener('click', () => this.loadSnippets());
+    this.allSnippetsBtn.addEventListener('click', () => this.loadAllSnippets());
+    this.syncBtn.addEventListener('click', () => this.refreshContextMenu());
     this.disconnectBtn.addEventListener('click', () => this.disconnect());
     this.settingsBtn.addEventListener('click', () => this.showSettings());
     this.webAppBtn.addEventListener('click', () => this.openWebApp());
@@ -264,7 +314,7 @@ class PopupUI {
   }
 
   openWebApp() {
-    chrome.tabs.create({ url: 'https://click-memory.vercel.app/auth' });
+    chrome.tabs.create({ url: `${this.state.webAppUrl}/auth` });
   }
 
   async loadSnippets() {
@@ -276,12 +326,18 @@ class PopupUI {
     this.showLoading(true);
     
     try {
-      const data = await this.api.getSnippets();
-      this.snippets = data.snippets || [];
+      // Fetch context menu snippets for popup display (default view)
+      const contextMenuData = await this.api.getContextMenuSnippets();
+      const contextMenuSnippets = contextMenuData.snippets || [];
+      
+      console.log('Fetched context menu snippets for popup:', contextMenuSnippets.length);
+      
+      // Use context menu snippets for popup display
+      this.snippets = contextMenuSnippets;
       this.filteredSnippets = [...this.snippets];
       
-      // Cache snippets for context menu
-      await chrome.storage.local.set({ cachedSnippets: this.snippets });
+      // Cache context menu snippets for context menu
+      await chrome.storage.local.set({ cachedSnippets: contextMenuSnippets });
       
       // Update context menu
       chrome.runtime.sendMessage({ action: 'updateContextMenu' });
@@ -290,6 +346,45 @@ class PopupUI {
       
     } catch (error) {
       console.error('Error loading snippets:', error);
+      this.showStatus(`Failed to load snippets: ${error.message}`, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  }
+
+  async loadAllSnippets() {
+    if (!this.api) {
+      console.error('No API available');
+      return;
+    }
+
+    this.showLoading(true);
+    
+    try {
+      // Fetch all snippets for popup display
+      const data = await this.api.getSnippets();
+      const allSnippets = data.snippets || [];
+      
+      console.log('Fetched all snippets for popup:', allSnippets.length);
+      
+      // Use all snippets for popup display
+      this.snippets = allSnippets;
+      this.filteredSnippets = [...this.snippets];
+      
+      // Still cache context menu snippets for context menu
+      try {
+        const contextMenuData = await this.api.getContextMenuSnippets();
+        const contextMenuSnippets = contextMenuData.snippets || [];
+        await chrome.storage.local.set({ cachedSnippets: contextMenuSnippets });
+        chrome.runtime.sendMessage({ action: 'updateContextMenu' });
+      } catch (contextMenuError) {
+        console.error('Error fetching context menu snippets:', contextMenuError);
+      }
+      
+      this.displaySnippets();
+      
+    } catch (error) {
+      console.error('Error loading all snippets:', error);
       this.showStatus(`Failed to load snippets: ${error.message}`, 'error');
     } finally {
       this.showLoading(false);
@@ -344,12 +439,36 @@ class PopupUI {
   }
 
   async refreshContextMenu() {
+    if (!this.api) {
+      console.error('No API available');
+      this.showStatus('No API available', 'error');
+      return;
+    }
+
     try {
-      await chrome.runtime.sendMessage({ action: 'updateContextMenu' });
-      this.showStatus('Context menu updated', 'success');
+      this.showStatus('Refreshing context menu...', 'loading');
+      
+      console.log('Starting context menu refresh...');
+      
+      // Fetch fresh context menu snippets
+      const contextMenuData = await this.api.getContextMenuSnippets();
+      const contextMenuSnippets = contextMenuData.snippets || [];
+      
+      console.log('Refreshed context menu snippets:', contextMenuSnippets.length);
+      console.log('Snippet titles:', contextMenuSnippets.map(s => s.title));
+      
+      // Cache fresh context menu snippets
+      await chrome.storage.local.set({ cachedSnippets: contextMenuSnippets });
+      console.log('Cached context menu snippets in storage');
+      
+      // Update context menu
+      const result = await chrome.runtime.sendMessage({ action: 'updateContextMenu' });
+      console.log('Context menu update result:', result);
+      
+      this.showStatus(`Context menu updated with ${contextMenuSnippets.length} snippets`, 'success');
     } catch (error) {
-      console.error('Error updating context menu:', error);
-      this.showStatus('Failed to update context menu', 'error');
+      console.error('Error refreshing context menu:', error);
+      this.showStatus('Failed to refresh context menu', 'error');
     }
   }
 
@@ -386,13 +505,13 @@ class PopupUI {
   }
 
   async resetSettings() {
-    this.state.webAppUrl = 'https://click-memory.vercel.app';
+    this.state.webAppUrl = DEFAULT_WEB_APP_URL;
     this.state.settings = {
       showSharedSnippets: true,
       showSnippetPreview: true
     };
     
-    this.webAppUrlInput.value = 'https://click-memory.vercel.app';
+    this.webAppUrlInput.value = DEFAULT_WEB_APP_URL;
     this.showSharedSnippets.checked = true;
     this.showSnippetPreview.checked = true;
     
@@ -434,21 +553,21 @@ class PopupUI {
     console.log('Running debug tests...');
     
     try {
-      // Test 1: Basic fetch to production URL
-      console.log('Test 1: Basic fetch to click-memory.vercel.app');
-      const test1 = await fetch('https://click-memory.vercel.app');
+      // Test 1: Basic fetch to current URL
+      console.log('Test 1: Basic fetch to current web app URL');
+      const test1 = await fetch(this.state.webAppUrl);
       console.log('Test 1 result:', test1.status, test1.statusText);
       
       // Test 2: API endpoint test
       console.log('Test 2: API endpoint test');
-      const test2 = await fetch('https://click-memory.vercel.app/api/snippets');
+      const test2 = await fetch(`${this.state.webAppUrl}/api/snippets`);
       console.log('Test 2 result:', test2.status, test2.statusText);
       
       // Test 3: With API key (if available)
       const result = await chrome.storage.local.get(['apiKey']);
       if (result.apiKey) {
         console.log('Test 3: API endpoint with auth');
-        const test3 = await fetch('https://click-memory.vercel.app/api/snippets', {
+        const test3 = await fetch(`${this.state.webAppUrl}/api/snippets`, {
           headers: {
             'Authorization': `Bearer ${result.apiKey}`,
             'Content-Type': 'application/json'

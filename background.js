@@ -4,8 +4,15 @@
 // For local development: http://localhost:3000
 // For production: https://click-memory.vercel.app
 const DEFAULT_WEB_APP_URL = 'https://click-memory.vercel.app';
+const REFRESH_INTERVAL = 2 ; // 2 minutes
 
-// Periodic sync of snippets (every 5 minutes)
+// Get the current web app URL from storage or use default
+async function getWebAppUrl() {
+  const result = await chrome.storage.local.get(['webAppUrl']);
+  return result.webAppUrl || DEFAULT_WEB_APP_URL;
+}
+
+// Periodic sync of snippets (every 1/2/ minute)
 let syncInterval;
 
 // Flag to prevent multiple simultaneous context menu creation
@@ -30,8 +37,11 @@ function startPeriodicSync() {
         return;
       }
       
+      // Get the current web app URL
+      const webAppUrl = await getWebAppUrl();
+      
       // Fetch fresh snippets
-      const response = await fetch('https://click-memory.vercel.app/api/snippets?context_menu=true', {
+      const response = await fetch(`${webAppUrl}/api/snippets?context_menu=true`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -59,7 +69,7 @@ function startPeriodicSync() {
     } catch (error) {
       console.error('Periodic sync error:', error);
     }
-  }, 5 * 60 * 1000); // 5 minutes
+  }, REFRESH_INTERVAL * 60 * 1000); // eg 2 minute
   
   console.log('Periodic sync started');
 }
@@ -127,6 +137,7 @@ async function createContextMenu() {
     
     // Always remove existing context menu items first
     await chrome.contextMenus.removeAll();
+    console.log('Removed existing context menu items');
     
     // Small delay to ensure removal is complete
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -138,6 +149,7 @@ async function createContextMenu() {
     
     console.log('API key exists:', !!apiKey);
     console.log('Cached snippets count:', cachedSnippets.length);
+    console.log('Cached snippet titles:', cachedSnippets.map(s => s.title));
     
     if (!apiKey) {
       // No API key, create setup menu item
@@ -179,6 +191,7 @@ async function createContextMenu() {
           title: snippet.title.length > 30 ? snippet.title.substring(0, 30) + '...' : snippet.title,
           contexts: ['editable']
         });
+        console.log('Created menu item for snippet:', snippet.title);
       } catch (error) {
         console.error('Error creating menu item for snippet:', snippet.id, error);
       }
@@ -217,19 +230,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   
   if (info.menuItemId === 'clickmemory-setup') {
     // Open setup page
-    chrome.tabs.create({ url: 'https://click-memory.vercel.app/auth' });
+    const webAppUrl = await getWebAppUrl();
+    chrome.tabs.create({ url: `${webAppUrl}/auth` });
     return;
   }
   
   if (info.menuItemId === 'clickmemory-no-snippets') {
     // Open dashboard to create snippets
-    chrome.tabs.create({ url: 'https://click-memory.vercel.app/dashboard' });
+    const webAppUrl = await getWebAppUrl();
+    chrome.tabs.create({ url: `${webAppUrl}/dashboard` });
     return;
   }
   
   if (info.menuItemId === 'clickmemory-error') {
     // Open dashboard to troubleshoot
-    chrome.tabs.create({ url: 'https://click-memory.vercel.app/dashboard' });
+    const webAppUrl = await getWebAppUrl();
+    chrome.tabs.create({ url: `${webAppUrl}/dashboard` });
     return;
   }
   

@@ -19,7 +19,7 @@ Follow these steps to set up and use the ClickMemory browser extension for quick
 
 Start by creating a snippet that you want to access quickly from any webpage.
 
-1. Go to your ClickMemory web app
+1. Go to your ClickMemory web app at [https://click-memory.vercel.app](https://click-memory.vercel.app)
 2. Navigate to the dashboard
 3. Click "Create New Snippet"
 4. Add your text content and save
@@ -43,19 +43,12 @@ Generate an API key from the Settings page. This key will securely connect your 
 
 ### Step 4: Install the Extension
 
-Download and install the ClickMemory browser extension to access your snippets from any webpage.
+Install the ClickMemory browser extension from the Chrome Web Store to access your snippets from any webpage.
 
-#### Development Installation
-
-1. Clone or download this extension folder
-2. Open Chrome and go to `chrome://extensions/`
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the `click-memory-extension` folder
-5. The extension should now appear in your extensions list
-
-#### Production Installation
-
-Once published to the Chrome Web Store, users can install it directly from there.
+1. Visit the Chrome Web Store
+2. Search for "ClickMemory"
+3. Click "Add to Chrome"
+4. Confirm the installation
 
 ### Step 5: Configure the Extension
 
@@ -79,7 +72,7 @@ Access settings by clicking the gear icon (⚙️) in the extension popup:
 
 ### Default Web App URL
 
-The extension is configured to work with: `https://click-memory-app.vercel.app`
+The extension is configured to work with: `https://click-memory.vercel.app`
 
 If you're using a different URL, update it in the settings.
 
@@ -105,38 +98,6 @@ If you're using a different URL, update it in the settings.
 2. **Check Permissions**: Ensure the extension has the required permissions
 3. **Clear Storage**: Try disconnecting and reconnecting with your API key
 
-## Development
-
-### File Structure
-
-```
-click-memory-extension/
-├── manifest.json          # Extension manifest
-├── popup.html            # Popup UI
-├── popup.css             # Popup styles
-├── popup.js              # Popup logic
-├── background.js         # Background service worker
-├── content.js            # Content script
-├── icons/                # Extension icons
-└── README.md             # This file
-```
-
-### Building for Production
-
-1. Create icon files in the `icons/` directory:
-   - `icon16.png` (16x16)
-   - `icon32.png` (32x32)
-   - `icon48.png` (48x48)
-   - `icon128.png` (128x128)
-
-2. Test the extension thoroughly
-
-3. Package for Chrome Web Store:
-   - Go to `chrome://extensions/`
-   - Click "Pack extension"
-   - Select the extension folder
-   - Upload the generated `.crx` file to the Chrome Web Store
-
 ## API Integration
 
 The extension communicates with your ClickMemory web app using the following endpoints:
@@ -151,6 +112,11 @@ For issues or questions:
 2. Verify your web app is properly configured
 3. Ensure your API key is valid and not expired
 4. Email us at info@iteraite.com
+
+## Privacy & Terms
+
+- [Privacy Policy](privacy-policy.html)
+- [Terms and Conditions](terms-and-conditions.html)
 
 ## License
 

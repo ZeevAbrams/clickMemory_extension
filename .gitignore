@@ -1,0 +1,177 @@
+# Chrome Extension specific files
+*.crx
+*.pem
+*.zip
+
+# Development and build files
+dist/
+build/
+*.min.js
+*.min.css
+
+# Node.js (if using npm/yarn for development)
+node_modules/
+package-lock.json
+yarn.lock
+.npm
+.yarn-integrity
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Temporary folders
+tmp/
+temp/
+
+# Chrome extension development
+*.crx
+*.pem
+web-ext-artifacts/
+
+# Local development overrides
+local-config.js
+dev-config.js
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Test files (if you add them later)
+test/
+tests/
+__tests__/
+*.test.js
+*.spec.js
+
+# Documentation build files
+docs/build/
+docs/_build/
+
+# Local development database
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation files that shouldn't be in version control
+# (These are development/planning files, not part of the extension)
+LOCAL_DEVELOPMENT.md
+store-assets-checklist.md
+package-for-store.md
+store-description.txt
+terms-and-conditions.md
+privacy-policy.md
+
+# Screenshots and promotional materials
+screenshot-*.png
+promotional-*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Store submission files
+click-memory-extension-store/
+click-memory-extension.zip
+
+# Development notes and planning
+notes.md
+TODO.md
+CHANGELOG.md
+DEVELOPMENT.md
+PLANNING.md
+
+# Configuration files that might contain sensitive data
+config.local.js
+secrets.js
+api-keys.txt
