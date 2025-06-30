@@ -2,8 +2,8 @@
 
 // Configuration
 // For local development: http://localhost:3000
-// For production: https://click-memory-app.vercel.app
-const DEFAULT_WEB_APP_URL = 'http://localhost:3000';
+// For production: https://click-memory.vercel.app
+const DEFAULT_WEB_APP_URL = 'https://click-memory.vercel.app';
 
 // Periodic sync of snippets (every 5 minutes)
 let syncInterval;
@@ -31,7 +31,7 @@ function startPeriodicSync() {
       }
       
       // Fetch fresh snippets
-      const response = await fetch('http://localhost:3000/api/snippets?context_menu=true', {
+      const response = await fetch('https://click-memory.vercel.app/api/snippets?context_menu=true', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -217,19 +217,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   
   if (info.menuItemId === 'clickmemory-setup') {
     // Open setup page
-    chrome.tabs.create({ url: 'http://localhost:3000/auth' });
+    chrome.tabs.create({ url: 'https://click-memory.vercel.app/auth' });
     return;
   }
   
   if (info.menuItemId === 'clickmemory-no-snippets') {
     // Open dashboard to create snippets
-    chrome.tabs.create({ url: 'http://localhost:3000/dashboard' });
+    chrome.tabs.create({ url: 'https://click-memory.vercel.app/dashboard' });
     return;
   }
   
   if (info.menuItemId === 'clickmemory-error') {
     // Open dashboard to troubleshoot
-    chrome.tabs.create({ url: 'http://localhost:3000/dashboard' });
+    chrome.tabs.create({ url: 'https://click-memory.vercel.app/dashboard' });
     return;
   }
   

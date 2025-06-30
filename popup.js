@@ -1,7 +1,7 @@
 // Configuration
 // For local development: http://localhost:3000
-// For production: https://click-memory-app.vercel.app
-const DEFAULT_WEB_APP_URL = 'http://localhost:3000';
+// For production: https://click-memory.vercel.app
+const DEFAULT_WEB_APP_URL = 'https://click-memory.vercel.app';
 
 // Tracking function for extension events
 async function trackEvent(eventName, properties = {}) {
@@ -9,7 +9,7 @@ async function trackEvent(eventName, properties = {}) {
     const result = await chrome.storage.local.get(['apiKey']);
     const apiKey = result.apiKey;
     
-    await fetch('http://localhost:3000/api/track', {
+    await fetch('https://click-memory.vercel.app/api/track', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -103,8 +103,8 @@ class ExtensionState {
     ]);
     
     this.apiKey = result.apiKey || null;
-    // Force localhost for development
-    this.webAppUrl = 'http://localhost:3000';
+    // Use production URL by default
+    this.webAppUrl = result.webAppUrl || 'https://click-memory.vercel.app';
     this.settings = { ...this.settings, ...result.settings };
   }
 
@@ -119,7 +119,7 @@ class ExtensionState {
   async clear() {
     await chrome.storage.local.clear();
     this.apiKey = null;
-    this.webAppUrl = 'http://localhost:3000';
+    this.webAppUrl = 'https://click-memory.vercel.app';
     this.settings = {
       showSharedSnippets: true,
       showSnippetPreview: true
@@ -484,36 +484,37 @@ class PopupUI {
   }
 
   async debugTest() {
-    console.log('=== DEBUG TEST START ===');
-    console.log('Current web app URL:', this.state.webAppUrl);
-    console.log('Default web app URL:', DEFAULT_WEB_APP_URL);
+    console.log('Running debug tests...');
     
     try {
-      this.showStatus('Running debug test...', 'loading');
-      
-      // Test 1: Basic fetch to localhost
-      console.log('Test 1: Basic fetch to localhost:3000');
-      const test1 = await fetch('http://localhost:3000');
+      // Test 1: Basic fetch to production URL
+      console.log('Test 1: Basic fetch to click-memory.vercel.app');
+      const test1 = await fetch('https://click-memory.vercel.app');
       console.log('Test 1 result:', test1.status, test1.statusText);
       
-      // Test 2: Fetch to the configured URL
-      console.log('Test 2: Fetch to configured URL:', this.state.webAppUrl);
-      const test2 = await fetch(this.state.webAppUrl);
+      // Test 2: API endpoint test
+      console.log('Test 2: API endpoint test');
+      const test2 = await fetch('https://click-memory.vercel.app/api/snippets');
       console.log('Test 2 result:', test2.status, test2.statusText);
       
-      // Test 3: Fetch to API endpoint
-      console.log('Test 3: Fetch to API endpoint');
-      const test3 = await fetch(`${this.state.webAppUrl}/api/snippets`);
-      console.log('Test 3 result:', test3.status, test3.statusText);
+      // Test 3: With API key (if available)
+      const result = await chrome.storage.local.get(['apiKey']);
+      if (result.apiKey) {
+        console.log('Test 3: API endpoint with auth');
+        const test3 = await fetch('https://click-memory.vercel.app/api/snippets', {
+          headers: {
+            'Authorization': `Bearer ${result.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('Test 3 result:', test3.status, test3.statusText);
+      }
       
-      this.showStatus('Debug test completed - check console', 'success');
-      
+      this.showStatus('Debug tests completed - check console', 'success');
     } catch (error) {
-      console.error('Debug test failed:', error);
-      this.showStatus(`Debug test failed: ${error.message}`, 'error');
+      console.error('Debug test error:', error);
+      this.showStatus('Debug test failed - check console', 'error');
     }
-    
-    console.log('=== DEBUG TEST END ===');
   }
 
   async resetToLocalhost() {
@@ -525,17 +526,20 @@ class PopupUI {
 // Fetch and cache snippets from web app
 async function fetchAndCacheSnippets() {
   try {
-    const result = await chrome.storage.local.get(['apiKey']);
+    console.log('Fetching and caching snippets...');
+    
+    const result = await chrome.storage.local.get(['apiKey', 'webAppUrl']);
     const apiKey = result.apiKey;
+    const webAppUrl = result.webAppUrl || 'https://click-memory.vercel.app';
     
     if (!apiKey) {
-      console.log('No API key found');
-      return [];
+      console.log('No API key found, skipping fetch');
+      return;
     }
     
-    console.log('Fetching snippets from web app...');
+    console.log('Fetching from:', webAppUrl);
     
-    const response = await fetch('http://localhost:3000/api/snippets?context_menu=true', {
+    const response = await fetch(`${webAppUrl}/api/snippets?context_menu=true`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -543,29 +547,38 @@ async function fetchAndCacheSnippets() {
         'User-Agent': 'ChromeExtension/1.0'
       }
     });
-    
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      console.log('Error response text:', errorText);
+      let error;
+      try {
+        error = JSON.parse(errorText);
+      } catch (e) {
+        error = { error: errorText };
+      }
+      throw new Error(error.error || 'Failed to fetch snippets');
     }
-    
+
     const data = await response.json();
+    console.log('Success response:', data);
+    
     const snippets = data.snippets || [];
+    console.log('Caching', snippets.length, 'snippets');
     
-    console.log('Fetched', snippets.length, 'snippets from web app');
-    
-    // Cache snippets in local storage
+    // Cache snippets
     await chrome.storage.local.set({ cachedSnippets: snippets });
+    
+    // Update context menu
+    chrome.runtime.sendMessage({ action: 'updateContextMenu' });
     
     console.log('Snippets cached successfully');
     
-    // Update context menu with new snippets
-    await chrome.runtime.sendMessage({ action: 'updateContextMenu' });
-    
-    return snippets;
-    
   } catch (error) {
-    console.error('Error fetching snippets:', error);
-    return [];
+    console.error('Error fetching and caching snippets:', error);
   }
 }
 
@@ -658,60 +671,28 @@ async function loadSnippets() {
 // Setup event listeners
 function setupEventListeners() {
   // Setup screen
-  document.getElementById('openWebApp').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: 'http://localhost:3000/auth' });
-  });
-  
-  document.getElementById('connectBtn').addEventListener('click', async () => {
-    const apiKey = document.getElementById('apiKeyInput').value.trim();
-    if (apiKey) {
-      await chrome.storage.local.set({ apiKey });
-      showMainScreen();
-      await loadSnippets();
-    }
-  });
-  
-  document.getElementById('resetBtn').addEventListener('click', async () => {
-    await chrome.storage.local.clear();
-    showSetupScreen();
+  document.getElementById('connectBtn').addEventListener('click', connect);
+  document.getElementById('openWebApp').addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://click-memory.vercel.app/auth' });
   });
   
   // Main screen
-  document.getElementById('settingsBtn').addEventListener('click', () => {
-    showSettingsScreen();
-  });
-  
-  document.getElementById('refreshBtn').addEventListener('click', async () => {
-    await loadSnippets();
-  });
-  
-  document.getElementById('disconnectBtn').addEventListener('click', async () => {
-    await chrome.storage.local.clear();
-    showSetupScreen();
-  });
-  
-  document.getElementById('syncBtn').addEventListener('click', async () => {
-    await loadSnippets();
+  document.getElementById('refreshBtn').addEventListener('click', loadSnippets);
+  document.getElementById('disconnectBtn').addEventListener('click', disconnect);
+  document.getElementById('settingsBtn').addEventListener('click', showSettingsScreen);
+  document.getElementById('webAppBtn').addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://click-memory.vercel.app/dashboard' });
   });
   
   // Settings screen
-  document.getElementById('backBtn').addEventListener('click', () => {
-    showMainScreen();
-  });
+  document.getElementById('backBtn').addEventListener('click', showMainScreen);
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('resetSettingsBtn').addEventListener('click', resetSettings);
+  document.getElementById('debugBtn').addEventListener('click', debugTest);
+  document.getElementById('resetBtn').addEventListener('click', resetToLocalhost);
   
-  document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
-    const webAppUrl = document.getElementById('webAppUrlInput').value.trim();
-    if (webAppUrl) {
-      await chrome.storage.local.set({ webAppUrl });
-    }
-    showMainScreen();
-  });
-  
-  document.getElementById('resetSettingsBtn').addEventListener('click', async () => {
-    await chrome.storage.local.set({ webAppUrl: 'http://localhost:3000' });
-    document.getElementById('webAppUrlInput').value = 'http://localhost:3000';
-  });
+  // Search functionality
+  document.getElementById('searchInput').addEventListener('input', filterSnippets);
 }
 
 // Initialize the popup when DOM is loaded
